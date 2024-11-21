@@ -1,0 +1,383 @@
+<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+    <title>猫咪平台跳跃游戏</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            max-width: 100%;
+            background: linear-gradient(to bottom, #87CEEB, #B0E0E6);
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 游戏角色
+        const player = {
+            x: 50,
+            y: 200,
+            width: 50,
+            height: 40,
+            speed: 5,
+            jumpForce: 12,
+            gravity: 0.5,
+            velocityY: 0,
+            isJumping: false,
+            direction: 1
+        };
+
+        // 敌人
+        const enemies = [
+            {
+                x: 300,
+                y: 200,
+                width: 30,
+                height: 30,
+                speed: 2,
+                color: '#FF4444',
+                moveRange: 100,
+                startX: 300
+            },
+            {
+                x: 600,
+                y: 100,
+                width: 30,
+                height: 30,
+                speed: 3,
+                color: '#FF0000',
+                moveRange: 150,
+                startX: 600
+            }
+        ];
+
+        // 平台
+        const platforms = [
+            {x: 0, y: 350, width: 800, height: 50, color: '#8B4513', pattern: 'grass', isMoving: false},
+            {x: 300, y: 250, width: 100, height: 20, color: '#FF69B4', pattern: 'simple', isMoving: true, speed: 2, moveRange: 100, startX: 300},
+            {x: 500, y: 200, width: 100, height: 20, color: '#4169E1', pattern: 'simple', isMoving: false},
+            {x: 100, y: 150, width: 100, height: 20, color: '#FFD700', pattern: 'simple', isMoving: true, speed: -2, moveRange: 150, startX: 100},
+            {x: 650, y: 150, width: 100, height: 20, color: '#98FB98', pattern: 'simple', isMoving: false},
+            {x: 200, y: 300, width: 100, height: 20, color: '#DDA0DD', pattern: 'simple', isMoving: false}
+        ];
+
+        // 绘制敌人
+        function drawEnemy(enemy) {
+            ctx.fillStyle = enemy.color;
+            
+            // 绘制主体
+            ctx.beginPath();
+            ctx.arc(enemy.x + enemy.width/2, enemy.y + enemy.height/2, enemy.width/2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 绘制眼睛
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(enemy.x + enemy.width/2 - 5, enemy.y + enemy.height/2 - 5, 4, 0, Math.PI * 2);
+            ctx.arc(enemy.x + enemy.width/2 + 5, enemy.y + enemy.height/2 - 5, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 绘制瞳孔
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(enemy.x + enemy.width/2 - 5, enemy.y + enemy.height/2 - 5, 2, 0, Math.PI * 2);
+            ctx.arc(enemy.x + enemy.width/2 + 5, enemy.y + enemy.height/2 - 5, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 绘制生气的眉毛
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(enemy.x + enemy.width/2 - 10, enemy.y + enemy.height/2 - 10);
+            ctx.lineTo(enemy.x + enemy.width/2 - 2, enemy.y + enemy.height/2 - 8);
+            ctx.moveTo(enemy.x + enemy.width/2 + 10, enemy.y + enemy.height/2 - 10);
+            ctx.lineTo(enemy.x + enemy.width/2 + 2, enemy.y + enemy.height/2 - 8);
+            ctx.stroke();
+        }
+
+        // 移动敌人
+        function moveEnemies() {
+            enemies.forEach(enemy => {
+                const distance = enemy.x - enemy.startX;
+                if (Math.abs(distance) > enemy.moveRange) {
+                    enemy.speed = -enemy.speed;
+                }
+                enemy.x += enemy.speed;
+            });
+        }
+
+        // 移动平台
+        function movePlatforms() {
+            platforms.forEach(platform => {
+                if (platform.isMoving) {
+                    const distance = platform.x - platform.startX;
+                    if (Math.abs(distance) > platform.moveRange) {
+                        platform.speed = -platform.speed;
+                    }
+                    platform.x += platform.speed;
+                }
+            });
+        }
+
+        // 绘制装饰性平台
+        function drawPlatform(platform) {
+            // 主平台
+            ctx.fillStyle = platform.color;
+            ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+
+            if (platform.pattern === 'grass') {
+                ctx.fillStyle = '#90EE90';
+                for (let i = 0; i < platform.width; i += 15) {
+                    ctx.beginPath();
+                    ctx.moveTo(platform.x + i, platform.y);
+                    ctx.lineTo(platform.x + i + 7, platform.y - 10);
+                    ctx.lineTo(platform.x + i + 14, platform.y);
+                    ctx.fill();
+                }
+            } else {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height/2);
+            }
+
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(platform.x, platform.y, platform.width, platform.height);
+        }
+
+        // 检查与敌人的碰撞
+        function checkEnemyCollision() {
+            return enemies.some(enemy => {
+                const dx = (player.x + player.width/2) - (enemy.x + enemy.width/2);
+                const dy = (player.y + player.height/2) - (enemy.y + enemy.height/2);
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                return distance < (player.width/2 + enemy.width/2);
+            });
+        }
+
+        // 绘制猫咪
+        function drawCat(x, y, direction) {
+            ctx.save();
+            ctx.translate(x + player.width / 2, y + player.height / 2);
+            if (direction < 0) {
+                ctx.scale(-1, 1);
+            }
+            ctx.translate(-(x + player.width / 2), -(y + player.height / 2));
+
+            // 身体
+            ctx.fillStyle = '#808080';
+            ctx.beginPath();
+            ctx.ellipse(x + player.width/2, y + player.height/2, 20, 15, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 头部
+            ctx.beginPath();
+            ctx.arc(x + player.width/2, y + player.height/2 - 5, 12, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 耳朵
+            ctx.beginPath();
+            ctx.moveTo(x + player.width/2 - 12, y + player.height/2 - 12);
+            ctx.lineTo(x + player.width/2 - 6, y + player.height/2 - 18);
+            ctx.lineTo(x + player.width/2, y + player.height/2 - 12);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(x + player.width/2 + 12, y + player.height/2 - 12);
+            ctx.lineTo(x + player.width/2 + 6, y + player.height/2 - 18);
+            ctx.lineTo(x + player.width/2, y + player.height/2 - 12);
+            ctx.fill();
+
+            // 眼睛
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(x + player.width/2 - 5, y + player.height/2 - 8, 4, 0, Math.PI * 2);
+            ctx.arc(x + player.width/2 + 5, y + player.height/2 - 8, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 瞳孔
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(x + player.width/2 - 5, y + player.height/2 - 8, 2, 0, Math.PI * 2);
+            ctx.arc(x + player.width/2 + 5, y + player.height/2 - 8, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 鼻子
+            ctx.fillStyle = 'pink';
+            ctx.beginPath();
+            ctx.arc(x + player.width/2, y + player.height/2 - 5, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 胡须
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            // 左边胡须
+            ctx.beginPath();
+            ctx.moveTo(x + player.width/2 - 5, y + player.height/2 - 4);
+            ctx.lineTo(x + player.width/2 - 15, y + player.height/2 - 6);
+            ctx.moveTo(x + player.width/2 - 5, y + player.height/2 - 2);
+            ctx.lineTo(x + player.width/2 - 15, y + player.height/2);
+            ctx.stroke();
+            // 右边胡须
+            ctx.beginPath();
+            ctx.moveTo(x + player.width/2 + 5, y + player.height/2 - 4);
+            ctx.lineTo(x + player.width/2 + 15, y + player.height/2 - 6);
+            ctx.moveTo(x + player.width/2 + 5, y + player.height/2 - 2);
+            ctx.lineTo(x + player.width/2 + 15, y + player.height/2);
+            ctx.stroke();
+
+            // 尾巴
+            ctx.strokeStyle = '#808080';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x + player.width/2 + 20, y + player.height/2);
+            ctx.quadraticCurveTo(
+                x + player.width/2 + 30, 
+                y + player.height/2 - 10,
+                x + player.width/2 + 25, 
+                y + player.height/2 - 15
+            );
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // 键盘事件监听
+        const keys = {
+            right: false,
+            left: false,
+            up: false
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') {
+                keys.right = true;
+                player.direction = 1;
+            }
+            if (e.key === 'ArrowLeft') {
+                keys.left = true;
+                player.direction = -1;
+            }
+            if (e.key === 'ArrowUp') keys.up = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowRight') keys.right = false;
+            if (e.key === 'ArrowLeft') keys.left = false;
+            if (e.key === 'ArrowUp') keys.up = false;
+        });
+
+        // 碰撞检测
+        function checkCollision(player, platform) {
+            return player.x < platform.x + platform.width &&
+                   player.x + player.width > platform.x &&
+                   player.y < platform.y + platform.height &&
+                   player.y + player.height > platform.y;
+        }
+
+        // 游戏状态
+        let gameOver = false;
+
+        // 游戏循环
+        function gameLoop() {
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('游戏结束', canvas.width/2, canvas.height/2);
+                ctx.font = '24px Arial';
+                ctx.fillText('按空格键重新开始', canvas.width/2, canvas.height/2 + 40);
+                return;
+            }
+
+            // 清除画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 移动敌人和平台
+            moveEnemies();
+            movePlatforms();
+
+            // 移动角色
+            if (keys.right) player.x += player.speed;
+            if (keys.left) player.x -= player.speed;
+            
+            // 跳跃逻辑
+            if (keys.up && !player.isJumping) {
+                player.velocityY = -player.jumpForce;
+                player.isJumping = true;
+            }
+
+            // 应用重力
+            player.velocityY += player.gravity;
+            player.y += player.velocityY;
+
+            // 检查平台碰撞
+            let onPlatform = false;
+            platforms.forEach(platform => {
+                if (checkCollision(player, platform)) {
+                    if (player.velocityY > 0) {
+                        player.y = platform.y - player.height;
+                        player.velocityY = 0;
+                        player.isJumping = false;
+                        onPlatform = true;
+                    }
+                }
+            });
+
+            // 检查敌人碰撞
+            if (checkEnemyCollision()) {
+                gameOver = true;
+            }
+
+            // 绘制所有平台
+            platforms.forEach(platform => {
+                drawPlatform(platform);
+            });
+
+            // 绘制所有敌人
+            enemies.forEach(enemy => {
+                drawEnemy(enemy);
+            });
+
+            // 绘制角色
+            drawCat(player.x, player.y, player.direction);
+
+            // 边界检查
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            if (player.y + player.height > canvas.height) {
+                player.y = canvas.height - player.height;
+                player.velocityY = 0;
+                player.isJumping = false;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 重新开始游戏
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && gameOver) {
+                gameOver = false;
+                player.x = 50;
+                player.y = 200;
+                player.velocityY = 0;
+                gameLoop();
+            }
+        });
+
+        gameLoop();
+    </script>
+
+
+</body></html>
